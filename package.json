@@ -1,9 +1,27 @@
 {
   "name": "@local/dsh-pomodoro",
   "version": "0.3.0",
-  "private": true,
   "type": "module",
   "description": "A Pomodoro timer for the DSH Web GUI: a draggable floating window that stays visible without an open session, plus an optional dock pill, sharing one focus/break countdown with cycle dots, chime, notifications, and local preferences.",
+  "license": "MIT",
+  "author": "atticuswx",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/atticuswx/dsh-pomodoro.git"
+  },
+  "homepage": "https://github.com/atticuswx/dsh-pomodoro#readme",
+  "bugs": {
+    "url": "https://github.com/atticuswx/dsh-pomodoro/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "pomodoro",
+    "timer",
+    "productivity",
+    "web-ui"
+  ],
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
@@ -17,8 +35,12 @@
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
+  "scripts": {
+    "check": "node --check index.js && node --check client.js && node -e \"const fs=require('node:fs');for (const f of ['package.json','locale/en.json','locale/zh.json']) JSON.parse(fs.readFileSync(f,'utf8'));console.log('json ok')\""
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

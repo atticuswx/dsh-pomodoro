@@ -3,6 +3,20 @@
 一个装在 DSH Web 界面里的番茄工作法倒计时。主界面是**常驻悬浮窗**：不依赖会话，
 在设置页、空会话、任何面板上都一直可见。
 
+> **English** — A Pomodoro timer for the DeepSeek Harness Web GUI. A draggable
+> floating window stays visible without an open session, with an optional pill
+> under the composer. One shared focus/break countdown with cycle dots, skip and
+> reset, a chime plus a notification when a phase ends, and phase lengths you can
+> change in the ⚙ panel. Everything is browser-local (`localStorage`), no server,
+> no network calls.
+>
+> ```bash
+> dsh plugin --profile web add github:atticuswx/dsh-pomodoro
+> ```
+>
+> Reload the page and the pill appears in the bottom-right corner. Requires a DSH
+> build with the Web client bundle support. MIT licensed.
+
 ## 长什么样
 
 收起时是右下角一颗小胶囊，显示剩余时间：
@@ -59,21 +73,37 @@
 
 ## 安装
 
-这个目录就是一个 bundle 包（纯 JS，没有构建步骤：`client.js` 就是浏览器直接加载的模块）。
-把它放到机器上任意位置，然后在 DSH 里用 Plugin Manager 安装该目录的绝对路径：
+从 GitHub 安装（推荐）：
+
+```bash
+dsh plugin --profile web add github:atticuswx/dsh-pomodoro
+```
+
+装完刷新页面，右下角就会出现那颗胶囊。想锁定版本，可以在地址后面加 tag：
+
+```bash
+dsh plugin --profile web add github:atticuswx/dsh-pomodoro#v0.3.0
+```
+
+也可以从本地目录安装（改代码即时生效，适合自己改着玩）：
 
 ```bash
 git clone https://github.com/atticuswx/dsh-pomodoro.git ~/dsh-plugins/dsh-pomodoro
+dsh plugin --profile web add ~/dsh-plugins/dsh-pomodoro
 ```
+
+或者在 DSH 里用 Plugin Manager 指向目录的绝对路径：
 
 ```text
 plugin_manager { action: "install_bundle", target: "/Users/<你>/dsh-plugins/dsh-pomodoro" }
 ```
 
-本地开发时也可以直接指向工作区里的目录。安装后 bundle 会写进 profile 的 `package.json`
-与 `cordis.patch.yml`，重启后仍在；Client 半通过 HMR 立刻注册到 `shell.overlay`
+包内没有构建步骤：`client.js` 就是浏览器直接加载的模块。安装后 bundle 会写进 profile 的
+`package.json` 与 `cordis.patch.yml`，重启后仍在；Client 半立刻注册到 `shell.overlay`
 （常驻悬浮窗）和 `conversation.composer.dock`（可选计时条）。改动 `client.js` 后若界面
 没更新，刷新一次页面即可。
+
+> 包名沿用本地开发时的 `@local/dsh-pomodoro`，安装时用上面的仓库地址即可，不需要关心名字。
 
 ## 实现要点
 

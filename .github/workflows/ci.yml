@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22.x]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Syntax and JSON check
+        run: npm run check
+      - name: Bundle wiring
+        run: |
+          node -e "
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const patch = pkg.dsh?.bundle?.patch;
+          if (!patch) throw new Error('package.json 缺少 dsh.bundle.patch');
+          if (!fs.existsSync(patch)) throw new Error('patch 文件不存在: ' + patch);
+          const yml = fs.readFileSync(patch, 'utf8');
+          if (!yml.includes(pkg.name)) throw new Error('cordis.patch.yml 未引用包名 ' + pkg.name);
+          for (const f of pkg.files) {
+            const fixed = f.replace(/\\*/g, '');
+            if (!/locale/.test(f) && !fs.existsSync(f)) throw new Error('files 中声明的文件不存在: ' + f);
+          }
+          if (!pkg.dsh?.client?.platform) throw new Error('缺少 dsh.client.platform');
+          console.log('bundle wiring ok');
+          "
