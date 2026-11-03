@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="dspTomato" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff6b5e"/>
+      <stop offset="1" stop-color="#d5392a"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="37" r="21" fill="url(#dspTomato)"/>
+  <circle cx="32" cy="37" r="21" fill="none" stroke="#ffffff" stroke-opacity=".3" stroke-width="1.4"/>
+  <path d="M32 17c-.4-4.2 1.1-7.4 4.6-9.6" fill="none" stroke="#2f9e5f" stroke-width="4"
+        stroke-linecap="round"/>
+  <ellipse cx="24.5" cy="15.5" rx="7.6" ry="3.2" fill="#37a866" transform="rotate(-18 24.5 15.5)"/>
+  <ellipse cx="39.5" cy="15.5" rx="7.6" ry="3.2" fill="#2f9e5f" transform="rotate(18 39.5 15.5)"/>
+  <path d="M32 26.5v10.9l7.6 4.7" fill="none" stroke="#ffffff" stroke-width="3.2"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="32" cy="37" r="2.3" fill="#ffffff"/>
+</svg>

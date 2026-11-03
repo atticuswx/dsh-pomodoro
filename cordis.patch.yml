@@ -1,0 +1,8 @@
+# dsh-pomodoro bundle patch: mounts the bundle row into the profile.
+#
+# One row owns both faces. The Host half is intentionally inert: the timer is
+# browser-local state, so the Client half in `dsh.client` does all the work and
+# the row exists so the bundle is selectable and visible in the plugin list.
+- insert:
+    - id: pomodoro
+      name: '@local/dsh-pomodoro'
