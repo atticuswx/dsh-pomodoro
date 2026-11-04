@@ -1,8 +1,8 @@
 {
   "name": "dsh-pomodoro",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "type": "module",
-  "description": "A Pomodoro timer for the DSH Web GUI: a draggable floating window that stays visible without an open session, plus an optional dock pill, sharing one focus/break countdown with cycle dots, chime, notifications, and local preferences.",
+  "description": "A Pomodoro timer for the DSH Web GUI: a draggable floating window that stays visible without an open session, plus an optional dock pill, sharing one focus/break countdown with cycle dots, chime, browser notifications, and a silent-friendly phase-end motion (edge glow, ripple, text card) for muted setups.",
   "license": "MIT",
   "author": "atticuswx",
   "repository": {

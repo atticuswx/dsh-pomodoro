@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark light" />
+<title>番茄时钟 · 阶段结束动效预览</title>
+<style>
+  /* Theme tokens mirror the official DSH light/dark palettes so the chip
+     renders in the same chrome as the installed plugin. */
+  :root {
+    --dsw-alias-bg-base: #151517;
+    --dsw-alias-bg-layer-1: #232324;
+    --dsw-alias-bg-layer-2: #2c2c2e;
+    --dsw-alias-bg-overlay: #61666b;
+    --dsw-alias-border-l1: #ffffff0f;
+    --dsw-alias-border-l2: #ffffff1f;
+    --dsw-alias-label-primary: #f9fafb;
+    --dsw-alias-label-secondary: #cfd3d6;
+    --dsw-alias-label-tertiary: #adb2b8;
+    --dsw-alias-interactive-bg-hover: #ffffff14;
+    --dsw-alias-brand-primary: #f9fafb;
+    --dsw-alias-state-error-primary: #f25a5a;
+    --dsw-alias-state-success-primary: #22c55e;
+    --dsw-static-deepseek-450: #5686fe;
+    --dsw-elevation-panel: 0 3px 8px 0 #00000018, 0 0 16px 0 #0000000d;
+    --pv-ease: cubic-bezier(.22, .61, .36, 1);
+    --pv-accent: var(--dsw-alias-state-success-primary);
+    --pv-accent-soft: color-mix(in srgb, var(--pv-accent) 38%, transparent);
+    --pv-accent-glow: color-mix(in srgb, var(--pv-accent) 14%, transparent);
+    --pv-skeleton: color-mix(in srgb, var(--dsw-alias-label-primary) 6%, transparent);
+    --pv-skeleton-strong: color-mix(in srgb, var(--dsw-alias-label-primary) 9%, transparent);
+  }
+
+  html[data-phase="focus"] { --pv-accent: var(--dsw-alias-state-error-primary); }
+  html[data-phase="short"], html[data-phase="long"] { --pv-accent: var(--dsw-alias-state-success-primary); }
+
+  html[data-theme="light"] {
+    --dsw-alias-bg-base: #ffffff;
+    --dsw-alias-bg-layer-1: #f7f8fa;
+    --dsw-alias-bg-layer-2: #eef0f3;
+    --dsw-alias-bg-overlay: #e9ecf2;
+    --dsw-alias-border-l1: #0000000a;
+    --dsw-alias-border-l2: #0000001a;
+    --dsw-alias-label-primary: #0f1115;
+    --dsw-alias-label-secondary: #61666b;
+    --dsw-alias-label-tertiary: #81858c;
+    --dsw-alias-interactive-bg-hover: #2631480f;
+    --dsw-alias-brand-primary: #0f1115;
+    --dsw-alias-state-error-primary: #ec1313;
+    --dsw-alias-state-success-primary: #22c55e;
+    --dsw-elevation-panel: 0 3px 8px 0 #00000010, 0 0 16px 0 #00000008;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    display: flex;
+    background: var(--dsw-alias-bg-base);
+    color: var(--dsw-alias-label-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- design-tool rail (not part of the mocked app) ---------- */
+  .panel {
+    width: 292px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 24px 20px 18px;
+    overflow-y: auto;
+    background: var(--dsw-alias-bg-layer-1);
+    border-right: 1px solid var(--dsw-alias-border-l1);
+  }
+  .panel-head { display: flex; flex-direction: column; gap: 8px; }
+  .panel-product { margin: 0; font-size: 11.5px; letter-spacing: .01em; color: var(--dsw-alias-label-tertiary); }
+  .panel h1 { margin: 0; font-size: 19px; line-height: 1.42; font-weight: 600; letter-spacing: -.01em; }
+  .panel-lead { margin: 0; font-size: 12.5px; line-height: 1.72; color: var(--dsw-alias-label-secondary); }
+  .panel-lead kbd {
+    font: inherit; font-size: 11px; padding: 0 4px; border-radius: 4px;
+    border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary);
+  }
+
+  .options { display: flex; flex-direction: column; gap: 8px; }
+  .option {
+    display: flex; flex-direction: column; gap: 4px; width: 100%;
+    padding: 11px 12px 11px 13px; text-align: left; cursor: pointer;
+    border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px;
+    background: transparent; color: inherit; font: inherit;
+    transition: border-color .16s ease, background-color .16s ease;
+  }
+  .option:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  .option[aria-checked="true"] {
+    border-color: var(--pv-accent);
+    background: color-mix(in srgb, var(--pv-accent) 8%, transparent);
+  }
+  .option-head { display: flex; align-items: center; gap: 7px; }
+  .option-name { font-size: 13px; font-weight: 500; letter-spacing: .01em; }
+  .option-tag {
+    font-size: 10.5px; line-height: 16px; padding: 0 6px; border-radius: 999px;
+    color: var(--dsw-alias-label-tertiary);
+    border: 1px solid var(--dsw-alias-border-l2);
+  }
+  .option[aria-checked="true"] .option-tag { color: var(--pv-accent); border-color: var(--pv-accent-soft); }
+  .option-replay { margin-left: auto; display: grid; place-items: center; width: 18px; height: 18px; color: var(--dsw-alias-label-tertiary); }
+  .option[aria-checked="true"] .option-replay { color: var(--pv-accent); }
+  .option-desc { font-size: 12px; line-height: 1.65; color: var(--dsw-alias-label-tertiary); }
+
+  .panel-fields { display: flex; flex-direction: column; gap: 12px; padding-top: 2px; }
+  .field { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .field-label { font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+  .seg {
+    display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px;
+    background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1);
+  }
+  .seg button {
+    height: 25px; padding: 0 9px; border: none; border-radius: 6px;
+    background: transparent; color: var(--dsw-alias-label-secondary);
+    font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap;
+  }
+  .seg button.is-on {
+    background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary);
+    box-shadow: 0 1px 2px #0000002e;
+  }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+  .check input { width: 14px; height: 14px; margin: 0; accent-color: var(--pv-accent); cursor: pointer; }
+  .panel-foot { margin: 2px 0 0; padding-top: 14px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 11.5px; line-height: 1.7; color: var(--dsw-alias-label-tertiary); }
+
+  /* ---------- mocked app stage ---------- */
+  .stage { position: relative; flex: 1; min-width: 0; overflow: hidden; background: var(--dsw-alias-bg-base); }
+  .mock { position: absolute; inset: 0; display: flex; }
+  .mock-rail {
+    width: 60px; flex: none; display: flex; flex-direction: column; align-items: center;
+    gap: 10px; padding-top: 16px;
+    border-right: 1px solid var(--dsw-alias-border-l1);
+    background: color-mix(in srgb, var(--dsw-alias-bg-base) 90%, #000);
+  }
+  html[data-theme="light"] .mock-rail { background: color-mix(in srgb, var(--dsw-alias-bg-base) 90%, #000); }
+  .mock-rail span { width: 26px; height: 26px; border-radius: 8px; background: var(--pv-skeleton); }
+  .mock-main {
+    flex: 1; min-width: 0; display: flex; flex-direction: column;
+    gap: 18px; padding: 44px 48px 26px;
+  }
+  .mock-thread { width: min(620px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 13px; flex: 1; justify-content: center; }
+  .mock-line { height: 9px; border-radius: 5px; background: var(--pv-skeleton); }
+  .mock-line.w1 { width: 58%; } .mock-line.w2 { width: 86%; } .mock-line.w3 { width: 72%; }
+  .mock-line.w4 { width: 44%; } .mock-line.w5 { width: 78%; }
+  .mock-bubble { align-self: flex-end; width: 42%; height: 32px; border-radius: 10px; background: var(--pv-skeleton-strong); }
+  .mock-composer {
+    width: min(620px, 100%); height: 62px; margin: 0 auto; flex: none;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 12px 0 16px; border-radius: 14px;
+    border: 1px solid var(--dsw-alias-border-l1);
+    background: var(--dsw-alias-bg-layer-1);
+  }
+  .mock-send { width: 28px; height: 28px; border-radius: 9px; background: var(--pv-skeleton-strong); }
+
+  /* ---------- the floating pomodoro chip (mirrors the real plugin) ---------- */
+  .dspf-root {
+    position: absolute; right: 18px; bottom: 18px;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+    font-size: 12px; line-height: 18px;
+  }
+  .dspf-chip {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 7px;
+    height: 32px; padding: 0 12px 0 8px;
+    border: 1px solid var(--dsw-alias-border-l1); border-radius: 999px;
+    background: var(--dsw-alias-bg-overlay);
+    box-shadow: var(--dsw-elevation-panel);
+    color: var(--dsw-alias-label-secondary);
+    font: inherit; font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: transform .12s ease, color .12s ease;
+  }
+  .dspf-chip:hover { transform: translateY(-1px); color: var(--dsw-alias-label-primary); }
+  .dspf-chip-time { font-weight: 500; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+  .dspf-ring { flex: none; display: block; color: var(--pv-accent); }
+  .dspf-root[data-phase="focus"] { --pv-accent: var(--dsw-alias-state-error-primary); }
+  .dspf-root[data-phase="short"],
+  .dspf-root[data-phase="long"] { --pv-accent: var(--dsw-alias-state-success-primary); }
+
+  /* ripple origin: the ring icon's box inside the chip */
+  .pv-ripple-host { position: absolute; left: 8px; top: 50%; width: 17px; height: 17px; transform: translateY(-50%); pointer-events: none; }
+  .pv-ring {
+    position: absolute; inset: -4px; border-radius: 50%;
+    border: 1.5px solid var(--pv-accent);
+    opacity: 0; transform: scale(.45);
+    animation: pv-ripple 1.15s var(--pv-ease) forwards;
+    will-change: transform, opacity;
+  }
+  @keyframes pv-ripple {
+    0%   { opacity: .6; transform: scale(.45); }
+    65%  { opacity: .14; }
+    100% { opacity: 0; transform: scale(2.75); }
+  }
+
+  .dspf-chip.is-pulse { animation: pv-chip-pulse .64s var(--pv-ease); }
+  @keyframes pv-chip-pulse {
+    0%   { transform: scale(1); }
+    26%  { transform: scale(1.045); }
+    58%  { transform: scale(.995); }
+    100% { transform: scale(1); }
+  }
+  .dspf-chip-time.is-swap { animation: pv-time-swap .34s var(--pv-ease); }
+  @keyframes pv-time-swap {
+    0%   { opacity: 0; transform: translateY(7px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  /* notice card above the chip */
+  .dspf-notice {
+    display: flex; align-items: stretch; gap: 9px;
+    width: 196px; padding: 8px 10px 8px 8px;
+    border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px;
+    background: var(--dsw-alias-bg-overlay);
+    box-shadow: var(--dsw-elevation-panel);
+    opacity: 0; transform: translateY(7px) scale(.985);
+    transition: opacity .2s ease, transform .3s var(--pv-ease);
+  }
+  .dspf-notice[hidden] { display: none; }
+  .dspf-notice.is-in { opacity: 1; transform: none; }
+  .dspf-notice-bar { width: 3px; flex: none; border-radius: 2px; background: var(--pv-accent); }
+  .dspf-notice-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .dspf-notice-title { font-size: 12px; line-height: 17px; font-weight: 500; color: var(--dsw-alias-label-primary); }
+  .dspf-notice-sub { font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-secondary); }
+
+  /* frame-wide aura + top hairline */
+  .pv-aura {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0;
+    box-shadow: inset 0 0 0 1px var(--pv-accent-soft), inset 0 0 90px var(--pv-accent-glow);
+    will-change: opacity;
+  }
+  .pv-aura.is-on { animation: pv-aura 2.05s ease-out; }
+  @keyframes pv-aura {
+    0%   { opacity: 0; }
+    12%  { opacity: .95; }
+    36%  { opacity: .18; }
+    54%  { opacity: .8; }
+    80%  { opacity: .1; }
+    100% { opacity: 0; }
+  }
+  .pv-topline {
+    position: absolute; top: 0; left: 0; right: 0; height: 2px; opacity: 0;
+    background: linear-gradient(90deg, transparent 4%, var(--pv-accent) 50%, transparent 96%);
+    transform: scaleX(.18); transform-origin: 50% 50%;
+    will-change: transform, opacity;
+  }
+  .pv-topline.is-on { animation: pv-topline 1.65s var(--pv-ease); }
+  @keyframes pv-topline {
+    0%   { opacity: 0; transform: scaleX(.18); }
+    18%  { opacity: .95; }
+    62%  { opacity: .5; }
+    100% { opacity: 0; transform: scaleX(1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pv-ring, .pv-topline { display: none; }
+    .pv-aura, .pv-aura.is-on { animation: none; opacity: 0; }
+    .dspf-chip.is-pulse { animation: none; }
+    .dspf-chip-time.is-swap { animation: none; }
+    .dspf-notice { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <aside class="panel">
+    <div class="panel-head">
+      <p class="panel-product">番茄时钟 · 动效方案</p>
+      <h1>阶段结束时，屏幕上发生什么</h1>
+      <p class="panel-lead">工作环境静音，提醒只能靠画面。选一个方案，点一下或按 <kbd>1</kbd>–<kbd>4</kbd> 重播，<kbd>R</kbd> 重播当前方案。</p>
+    </div>
+
+    <div class="options" role="radiogroup" aria-label="阶段结束动效方案">
+      <button class="option" type="button" role="radio" aria-checked="false" data-effect="ripple">
+        <span class="option-head">
+          <span class="option-name">A · 涟漪</span>
+          <span class="option-tag">克制</span>
+          <span class="option-replay" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 9.8a5 5 0 1 0 .4-4.1"/><path d="M3 3.4v3h3"/></svg></span>
+        </span>
+        <span class="option-desc">胶囊里荡开三圈同色波纹，时间翻到下一阶段。只在角落发生，最安静。</span>
+      </button>
+
+      <button class="option" type="button" role="radio" aria-checked="false" data-effect="notice">
+        <span class="option-head">
+          <span class="option-name">B · 提示卡</span>
+          <span class="option-tag">明确</span>
+          <span class="option-replay" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 9.8a5 5 0 1 0 .4-4.1"/><path d="M3 3.4v3h3"/></svg></span>
+        </span>
+        <span class="option-desc">胶囊上方浮出一条文字提示，写明刚结束什么、下一阶段多长，4 秒后自动消失。</span>
+      </button>
+
+      <button class="option" type="button" role="radio" aria-checked="false" data-effect="aura">
+        <span class="option-head">
+          <span class="option-name">C · 边缘光</span>
+          <span class="option-tag">醒目</span>
+          <span class="option-replay" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 9.8a5 5 0 1 0 .4-4.1"/><path d="M3 3.4v3h3"/></svg></span>
+        </span>
+        <span class="option-desc">整个界面四周泛起两层很淡的同色光，加一条顶部细线。视线在屏幕任何位置都能察觉。</span>
+      </button>
+
+      <button class="option" type="button" role="radio" aria-checked="true" data-effect="combo">
+        <span class="option-head">
+          <span class="option-name">D · 组合</span>
+          <span class="option-tag">推荐</span>
+          <span class="option-replay" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 9.8a5 5 0 1 0 .4-4.1"/><path d="M3 3.4v3h3"/></svg></span>
+        </span>
+        <span class="option-desc">边缘光加胶囊涟漪同时发生：远处能看见，角落能看清。需要更明确时可叠加提示卡。</span>
+      </button>
+    </div>
+
+    <div class="panel-fields">
+      <div class="field">
+        <span class="field-label">场景</span>
+        <div class="seg" role="group" aria-label="场景">
+          <button type="button" data-scene="toBreak" class="is-on">专注 → 休息</button>
+          <button type="button" data-scene="toFocus">休息 → 专注</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="field-label">主题</span>
+        <div class="seg" role="group" aria-label="主题">
+          <button type="button" data-theme="dark" class="is-on">深色</button>
+          <button type="button" data-theme="light">浅色</button>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="withNotice" /> 组合时叠加提示卡</label>
+      <label class="check"><input type="checkbox" id="autoPlay" /> 每 7 秒自动演示</label>
+    </div>
+
+    <p class="panel-foot">真实插件里，这套动效在收起的小胶囊和展开的卡片上都会播放；系统开启「减少动态效果」时，退化为静态描边加提示卡。</p>
+  </aside>
+
+  <main class="stage">
+    <div class="mock" aria-hidden="true">
+      <div class="mock-rail"><span></span><span></span><span></span></div>
+      <div class="mock-main">
+        <div class="mock-thread">
+          <div class="mock-line w1"></div>
+          <div class="mock-line w2"></div>
+          <div class="mock-line w3"></div>
+          <div class="mock-bubble"></div>
+          <div class="mock-line w4"></div>
+          <div class="mock-line w5"></div>
+        </div>
+        <div class="mock-composer"><span class="mock-line w4" style="width:34%"></span><span class="mock-send"></span></div>
+      </div>
+    </div>
+
+    <div class="dspf-root" id="chipRoot" data-phase="focus">
+      <div class="dspf-notice" id="notice" role="status" aria-live="polite" hidden>
+        <span class="dspf-notice-bar" aria-hidden="true"></span>
+        <span class="dspf-notice-text">
+          <span class="dspf-notice-title" id="noticeTitle">专注结束</span>
+          <span class="dspf-notice-sub" id="noticeSub">休息 5:00</span>
+        </span>
+      </div>
+      <button class="dspf-chip" id="chip" type="button" title="重播当前动效">
+        <span class="pv-ripple-host" id="rippleHost" aria-hidden="true"></span>
+        <svg class="dspf-ring" viewBox="0 0 16 16" width="17" height="17" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-opacity=".18" stroke-width="1.8"></circle>
+          <circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="38.96" stroke-dashoffset="27.27" transform="rotate(-90 8 8)"></circle>
+        </svg>
+        <span class="dspf-chip-time" id="chipTime">0:02</span>
+      </button>
+    </div>
+
+    <div class="pv-aura" id="aura" aria-hidden="true"></div>
+    <div class="pv-topline" id="topline" aria-hidden="true"></div>
+  </main>
+
+<script>
+(() => {
+  const chipRoot = document.getElementById('chipRoot');
+  const chip = document.getElementById('chip');
+  const timeEl = document.getElementById('chipTime');
+  const rippleHost = document.getElementById('rippleHost');
+  const aura = document.getElementById('aura');
+  const topline = document.getElementById('topline');
+  const notice = document.getElementById('notice');
+  const noticeTitle = document.getElementById('noticeTitle');
+  const noticeSub = document.getElementById('noticeSub');
+  const withNotice = document.getElementById('withNotice');
+  const autoPlay = document.getElementById('autoPlay');
+
+  const scenes = {
+    toBreak: {
+      from: { phase: 'focus', time: '0:02' },
+      to: { phase: 'short', time: '5:00' },
+      title: '专注结束',
+      sub: '休息 5:00',
+    },
+    toFocus: {
+      from: { phase: 'short', time: '0:02' },
+      to: { phase: 'focus', time: '25:00' },
+      title: '休息结束',
+      sub: '继续专注 25:00',
+    },
+  };
+
+  const state = { effect: 'combo', scene: 'toBreak', auto: false };
+  let timers = [];
+  let autoTimer = null;
+
+  const later = (fn, ms) => {
+    const id = setTimeout(fn, ms);
+    timers.push(id);
+    return id;
+  };
+  const clearTimers = () => {
+    for (const id of timers) clearTimeout(id);
+    timers = [];
+  };
+  const retrigger = (element, className, ms) => {
+    element.classList.remove(className);
+    void element.offsetWidth;
+    element.classList.add(className);
+    later(() => element.classList.remove(className), ms);
+  };
+
+  const setAccent = (phase) => {
+    document.documentElement.dataset.phase = phase;
+    chipRoot.dataset.phase = phase;
+  };
+
+  const setScene = (scene) => {
+    state.scene = scene;
+    setAccent(scenes[scene].from.phase);
+    timeEl.textContent = scenes[scene].from.time;
+    for (const button of document.querySelectorAll('[data-scene]')) {
+      button.classList.toggle('is-on', button.dataset.scene === scene);
+    }
+  };
+
+  const playRipple = () => {
+    rippleHost.replaceChildren();
+    for (let index = 0; index < 3; index += 1) {
+      const ring = document.createElement('span');
+      ring.className = 'pv-ring';
+      ring.style.animationDelay = `${index * 150}ms`;
+      rippleHost.appendChild(ring);
+    }
+    later(() => rippleHost.replaceChildren(), 1800);
+  };
+
+  const playAura = () => {
+    retrigger(aura, 'is-on', 2150);
+    retrigger(topline, 'is-on', 1700);
+  };
+
+  const showNotice = (scene) => {
+    noticeTitle.textContent = scenes[scene].title;
+    noticeSub.textContent = scenes[scene].sub;
+    notice.hidden = false;
+    notice.classList.remove('is-in');
+    void notice.offsetWidth;
+    later(() => notice.classList.add('is-in'), 40);
+    later(() => notice.classList.remove('is-in'), 4300);
+    later(() => { notice.hidden = true; }, 4700);
+  };
+
+  const play = (effect = state.effect) => {
+    clearTimers();
+    const scene = scenes[state.scene];
+
+    // Rest at the last second of the phase, then take the step.
+    notice.hidden = true;
+    notice.classList.remove('is-in');
+    rippleHost.replaceChildren();
+    chip.classList.remove('is-pulse');
+    timeEl.classList.remove('is-swap');
+    setAccent(scene.from.phase);
+    timeEl.textContent = scene.from.time;
+
+    later(() => {
+      setAccent(scene.to.phase);
+      timeEl.textContent = scene.to.time;
+      retrigger(timeEl, 'is-swap', 380);
+      retrigger(chip, 'is-pulse', 680);
+      if (effect === 'ripple' || effect === 'combo') playRipple();
+      if (effect === 'aura' || effect === 'combo') playAura();
+      const wantsNotice = effect === 'notice' || (effect === 'combo' && withNotice.checked);
+      if (wantsNotice) showNotice(state.scene);
+    }, 150);
+  };
+
+  const select = (effect) => {
+    state.effect = effect;
+    for (const button of document.querySelectorAll('[data-effect]')) {
+      button.setAttribute('aria-checked', String(button.dataset.effect === effect));
+    }
+    play(effect);
+  };
+
+  for (const button of document.querySelectorAll('[data-effect]')) {
+    button.addEventListener('click', () => select(button.dataset.effect));
+  }
+  for (const button of document.querySelectorAll('[data-scene]')) {
+    button.addEventListener('click', () => setScene(button.dataset.scene));
+  }
+  for (const button of document.querySelectorAll('[data-theme]')) {
+    button.addEventListener('click', () => {
+      document.documentElement.dataset.theme = button.dataset.theme;
+      for (const other of document.querySelectorAll('[data-theme]')) {
+        other.classList.toggle('is-on', other === button);
+      }
+    });
+  }
+
+  chip.addEventListener('click', () => play());
+
+  autoPlay.addEventListener('change', () => {
+    state.auto = autoPlay.checked;
+    if (autoTimer !== null) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+    }
+    if (state.auto) {
+      autoTimer = setInterval(() => play(), 7000);
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.target instanceof HTMLInputElement) return;
+    const order = ['ripple', 'notice', 'aura', 'combo'];
+    const index = Number(event.key) - 1;
+    if (index >= 0 && index < order.length) select(order[index]);
+    else if (event.key.toLowerCase() === 'r') play();
+  });
+
+  // Expose the player for the browser-based preview check.
+  window.__preview = { play, select, setScene };
+  setScene('toBreak');
+})();
+</script>
+</body>
+</html>

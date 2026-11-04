@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Pomodoro Timer",
-    "description": "A draggable floating focus/break countdown that stays visible without an open session, plus an optional pill under the composer: progress ring, cycle dots, skip/reset, a chime and a notification when a phase ends, and local preferences for phase lengths."
+    "description": "A draggable floating focus/break countdown that stays visible without an open session, plus an optional pill under the composer: progress ring, cycle dots, skip/reset, a chime and a notification, and a silent-friendly phase-end motion (edge glow, ripple, text card) for muted setups."
   }
 }

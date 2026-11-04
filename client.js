@@ -33,6 +33,14 @@ window.__ModuleLoader__.load({
     const TICK_MS = 250
     /** Longest delay setTimeout accepts without overflow. */
     const MAX_TIMEOUT = 2147483647
+    /** Phase-end motion: how long the aura/ripple window stays mounted. */
+    const ALERT_MOTION_MS = 2400
+    /** Phase-end notice: long enough to read the next phase, then fade out. */
+    const ALERT_NOTICE_MS = 5300
+    /** Alerts older than this are never replayed after a remount or hidden tab. */
+    const ALERT_MAX_AGE_MS = 10 * 60 * 1000
+    /** Phase-end motion choices, weakest to strongest. */
+    const MOTION_MODES = ['off', 'ripple', 'aura', 'combo']
 
     /** English copy; the Chinese dictionary carries the same keys. */
     const EN = {
@@ -55,6 +63,16 @@ window.__ModuleLoader__.load({
       rounds: 'Rounds before a long break',
       autoStart: 'Auto-start the next phase',
       sound: 'Chime when a phase ends',
+      motionLabel: 'Phase-end motion',
+      motionOff: 'Off',
+      motionRipple: 'Ripple',
+      motionAura: 'Edge glow',
+      motionCombo: 'Combo',
+      noticeToggle: 'Also show a text card',
+      previewMotion: 'Preview motion',
+      focusFinished: 'Focus finished',
+      shortFinished: 'Break finished',
+      longFinished: 'Long break finished',
       floatToggle: 'Show the floating timer',
       dockToggle: 'Also show under the composer',
       minutes: 'min',
@@ -86,6 +104,16 @@ window.__ModuleLoader__.load({
       rounds: '长休息前轮数',
       autoStart: '自动开始下一阶段',
       sound: '阶段结束时提示音',
+      motionLabel: '结束提醒动效',
+      motionOff: '关',
+      motionRipple: '涟漪',
+      motionAura: '边缘光',
+      motionCombo: '组合',
+      noticeToggle: '同时显示文字提示卡',
+      previewMotion: '试播动效',
+      focusFinished: '专注结束',
+      shortFinished: '短休息结束',
+      longFinished: '长休息结束',
       floatToggle: '显示悬浮窗',
       dockToggle: '输入框下方也显示一条',
       minutes: '分钟',
@@ -111,6 +139,8 @@ window.__ModuleLoader__.load({
       rounds: 4,
       autoStart: true,
       sound: true,
+      motion: 'combo',
+      notice: true,
       float: true,
       dock: false,
     })
@@ -133,6 +163,8 @@ window.__ModuleLoader__.load({
         rounds: clampInt(source.rounds, LIMITS.rounds[0], LIMITS.rounds[1], base.rounds),
         autoStart: typeof source.autoStart === 'boolean' ? source.autoStart : base.autoStart,
         sound: typeof source.sound === 'boolean' ? source.sound : base.sound,
+        motion: MOTION_MODES.indexOf(source.motion) === -1 ? base.motion : source.motion,
+        notice: typeof source.notice === 'boolean' ? source.notice : base.notice,
         float: typeof source.float === 'boolean' ? source.float : base.float,
         dock: typeof source.dock === 'boolean' ? source.dock : base.dock,
       }
@@ -143,6 +175,86 @@ window.__ModuleLoader__.load({
       const total = Math.max(0, Math.ceil(ms / 1000))
       const seconds = total % 60
       return `${Math.floor(total / 60)}:${String(seconds).padStart(2, '0')}`
+    }
+
+    /** Whether the platform asks applications to tone motion down. */
+    function prefersReducedMotion() {
+      try {
+        return window.matchMedia('(prefers-reduced-motion: reduce)').matches === true
+      } catch (error) {
+        return false
+      }
+    }
+
+    /** Run one short WAAPI animation when the platform allows motion. */
+    function animateSurface(element, keyframes, options) {
+      if (element === null || element === undefined) return
+      if (prefersReducedMotion() === true) return
+      try {
+        if (typeof element.animate !== 'function') return
+        element.animate(keyframes, options)
+      } catch (error) {
+        /* the static alert state is still there */
+      }
+    }
+
+    /**
+     * Watch the store's alert signal and return the alert currently on screen.
+     * A phase that ended while the tab was hidden plays when the tab returns,
+     * unless it already is too old to be meaningful.
+     */
+    function usePhaseAlert(signal, options) {
+      const [view, setView] = React.useState(null)
+      const seenRef = React.useRef(0)
+      const hiddenTaskRef = React.useRef(null)
+      const timerRef = React.useRef(null)
+      const enabled = options.enabled === true
+      const withNotice = options.withNotice === true
+
+      React.useEffect(() => {
+        const incoming = signal
+        if (incoming === null || incoming === undefined) return
+        if (incoming.seq === seenRef.current) return
+        seenRef.current = incoming.seq
+        if (enabled !== true) return
+
+        const run = () => {
+          hiddenTaskRef.current = null
+          if (Date.now() - incoming.at > ALERT_MAX_AGE_MS) return
+          if (timerRef.current !== null) clearTimeout(timerRef.current)
+          setView({ token: incoming.seq, from: incoming.from, to: incoming.to })
+          timerRef.current = setTimeout(() => {
+            timerRef.current = null
+            setView(null)
+          }, withNotice === true ? ALERT_NOTICE_MS : ALERT_MOTION_MS)
+        }
+
+        if (document.hidden === true) {
+          hiddenTaskRef.current = run
+          return
+        }
+        run()
+      }, [signal, enabled, withNotice])
+
+      React.useEffect(() => {
+        const onVisibilityChange = () => {
+          if (document.hidden === true) return
+          const task = hiddenTaskRef.current
+          if (task === null) return
+          hiddenTaskRef.current = null
+          task()
+        }
+        document.addEventListener('visibilitychange', onVisibilityChange)
+        return () => {
+          document.removeEventListener('visibilitychange', onVisibilityChange)
+          if (timerRef.current !== null) {
+            clearTimeout(timerRef.current)
+            timerRef.current = null
+          }
+        }
+      }, [])
+
+      return view
     }
 
     /**
@@ -158,6 +270,9 @@ window.__ModuleLoader__.load({
     let phaseTotalMs = remainingMs
     let doneFocus = 0
     let snapshot = null
+    /** Last natural phase completion, published for the visual alert surfaces. */
+    let alertSignal = null
+    let alertSeq = 0
     const subscribers = new Set()
     let tickerHandle = null
     let wakeHandle = null
@@ -242,6 +357,7 @@ window.__ModuleLoader__.load({
         doneFocus,
         roundInCycle: phase === 'long' ? settings.rounds : doneFocus % settings.rounds,
         settings,
+        alert: alertSignal,
       }
     }
 
@@ -352,6 +468,18 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /** Record one natural completion; the UI layer decides how loud to be. */
+    function raiseAlert(from, to) {
+      alertSeq += 1
+      alertSignal = { seq: alertSeq, from, to, at: Date.now() }
+    }
+
+    /** Play the alert once without touching the countdown (settings preview). */
+    function previewAlert() {
+      raiseAlert(phase, nextPhaseAfter(phase))
+      publish()
+    }
+
     /** Advance exactly one phase; skipping keeps the current run state. */
     function finishPhase(skipped) {
       const finished = phase
@@ -361,11 +489,12 @@ window.__ModuleLoader__.load({
       const shouldRun = skipped === true ? wasRunning : settings.autoStart
       enterPhase(next, shouldRun)
       persist()
-      publish()
       if (skipped !== true) {
+        raiseAlert(finished, next)
         chime(finished === 'focus')
         notifyPhase(finished)
       }
+      publish()
       armWake()
     }
 
@@ -534,7 +663,8 @@ window.__ModuleLoader__.load({
 
     /** Component-local stylesheet; unmounting the entry removes it. */
     const CSS = [
-      '.dsp-root{display:inline-flex;flex-direction:column;align-items:flex-end;gap:6px;',
+      '.dsp-root{position:relative;display:inline-flex;flex-direction:column;',
+      'align-items:flex-end;gap:6px;',
       'font-size:12px;line-height:20px;--dsp-accent:var(--dsw-alias-label-tertiary)}',
       '.dsp-root[data-phase="focus"],.dspf-root[data-phase="focus"]{',
       '--dsp-accent:var(--dsw-alias-state-error-primary)}',
@@ -542,7 +672,7 @@ window.__ModuleLoader__.load({
       '.dspf-root[data-phase="short"],.dspf-root[data-phase="long"]{',
       '--dsp-accent:var(--dsw-alias-state-success-primary)}',
       '.dsp-bar{display:inline-flex;align-items:center;gap:1px;white-space:nowrap}',
-      '.dsp-clock{display:inline-flex;align-items:center;gap:6px;height:22px;',
+      '.dsp-clock{position:relative;display:inline-flex;align-items:center;gap:6px;height:22px;',
       'padding:0 6px 0 5px;border:none;border-radius:6px;background:transparent;',
       'color:var(--dsw-alias-label-secondary);font:inherit;font-variant-numeric:tabular-nums;',
       'letter-spacing:.01em;cursor:pointer}',
@@ -577,6 +707,15 @@ window.__ModuleLoader__.load({
       '.dsp-num::-webkit-outer-spin-button,.dsp-num::-webkit-inner-spin-button{',
       '-webkit-appearance:none;margin:0}',
       '.dsp-unit{color:var(--dsw-alias-label-tertiary);font-size:11px}',
+      '.dsp-stack{display:flex;flex-direction:column;gap:6px}',
+      '.dsp-choice{display:flex;gap:4px;padding:2px;border:1px solid var(--dsw-alias-border-l1);',
+      'border-radius:8px;background:var(--dsw-alias-bg-layer-2)}',
+      '.dsp-choice-btn{flex:1;height:23px;padding:0 4px;border:none;border-radius:6px;',
+      'background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;',
+      'font-size:11px;cursor:pointer;white-space:nowrap}',
+      '.dsp-choice-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.dsp-choice-btn[aria-pressed="true"]{background:var(--dsw-alias-bg-layer-1);',
+      'color:var(--dsw-alias-label-primary);box-shadow:inset 0 0 0 1px var(--dsw-alias-border-l2)}',
       '.dsp-switch{position:relative;flex:none;width:30px;height:17px;padding:0;',
       'border:1px solid var(--dsw-alias-border-l2);border-radius:999px;',
       'background:var(--dsw-alias-bg-layer-2);cursor:pointer;',
@@ -589,12 +728,15 @@ window.__ModuleLoader__.load({
       '.dsp-switch[aria-checked="true"]::after{transform:translateX(13px);',
       'background:var(--dsw-alias-bg-base)}',
       '.dsp-rule{height:1px;background:var(--dsw-alias-border-l1);margin:1px 0}',
-      '.dsp-actions{display:flex;align-items:center;justify-content:space-between;gap:8px}',
+      '.dsp-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;',
+      'flex-wrap:wrap}',
       '.dsp-action{height:24px;padding:0 8px;border:1px solid var(--dsw-alias-border-l1);',
       'border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);',
       'font:inherit;font-size:11px;cursor:pointer}',
       '.dsp-action:hover{background:var(--dsw-alias-interactive-bg-hover);',
       'color:var(--dsw-alias-label-primary)}',
+      '.dsp-action:disabled{opacity:.45;cursor:default}',
+      '.dsp-action:disabled:hover{background:transparent;color:var(--dsw-alias-label-secondary)}',
       '.dsp-root button:focus-visible,.dsp-root input:focus-visible,.dspf-root button:focus-visible,',
       '.dspf-root input:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid ',
       'var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px}',
@@ -618,7 +760,8 @@ window.__ModuleLoader__.load({
       '.dspf-card{box-sizing:border-box;width:246px;display:flex;flex-direction:column;gap:8px;',
       'padding:9px 12px 12px;border:1px solid var(--dsw-alias-border-l1);',
       'border-radius:14px;background:var(--dsw-alias-bg-overlay);',
-      'box-shadow:var(--dsw-elevation-panel);color:var(--dsw-alias-label-primary)}',
+      'box-shadow:var(--dsw-elevation-panel);color:var(--dsw-alias-label-primary);',
+      'max-height:calc(100vh - 24px);overflow-y:auto}',
       '.dspf-head{display:flex;align-items:center;gap:6px;margin:-1px -4px 0 -4px;',
       'padding:1px 4px;cursor:grab;user-select:none;touch-action:none}',
       '.dspf-head:active{cursor:grabbing}',
@@ -651,6 +794,52 @@ window.__ModuleLoader__.load({
       '.dspf-settings{border-top:1px solid var(--dsw-alias-border-l1);padding-top:8px}',
       '.dspf-settings .dsp-panel{width:100%;padding:0;border:none;background:transparent;',
       'box-shadow:none;gap:6px}',
+      // Phase-end alert: frame aura, top hairline, corner ripples, notice card.
+      '.dspf-aura{position:fixed;inset:0;pointer-events:none;opacity:0;',
+      'box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dsp-accent) 36%,transparent),',
+      'inset 0 0 90px color-mix(in srgb,var(--dsp-accent) 13%,transparent);',
+      'animation:dspf-aura 2.05s ease-out}',
+      '@keyframes dspf-aura{0%{opacity:0}12%{opacity:.95}36%{opacity:.18}',
+      '54%{opacity:.8}80%{opacity:.1}100%{opacity:0}}',
+      '.dspf-topline{position:fixed;top:0;left:0;right:0;height:2px;pointer-events:none;',
+      'background:linear-gradient(90deg,transparent 4%,var(--dsp-accent) 50%,transparent 96%);',
+      'transform:scaleX(.18);transform-origin:50% 50%;',
+      'animation:dspf-topline 1.65s cubic-bezier(.22,.61,.36,1) both}',
+      '@keyframes dspf-topline{0%{opacity:0;transform:scaleX(.18)}18%{opacity:.9}',
+      '62%{opacity:.5}100%{opacity:0;transform:scaleX(1)}}',
+      '.dspf-ripples{position:absolute;pointer-events:none;border-radius:50%;z-index:0}',
+      '.dsp-clock .dspf-ripples{left:5px;top:50%;width:16px;height:16px;',
+      'transform:translateY(-50%)}',
+      '.dspf-chip .dspf-ripples{left:8px;top:50%;width:17px;height:17px;',
+      'transform:translateY(-50%)}',
+      '.dspf-clock .dspf-ripples{left:50%;top:50%;width:58px;height:58px;',
+      'transform:translate(-50%,-50%)}',
+      '.dspf-ripple{position:absolute;inset:0;border-radius:50%;opacity:0;',
+      'border:1.5px solid var(--dsp-accent);',
+      'animation:dspf-ripple 1.1s cubic-bezier(.22,.61,.36,1) forwards}',
+      '.dspf-clock .dspf-ripple{border-width:1.2px;animation-name:dspf-ripple-lg}',
+      '@keyframes dspf-ripple{0%{opacity:.6;transform:scale(.5)}65%{opacity:.16}',
+      '100%{opacity:0;transform:scale(2.6)}}',
+      '@keyframes dspf-ripple-lg{0%{opacity:.5;transform:scale(.55)}65%{opacity:.12}',
+      '100%{opacity:0;transform:scale(1.7)}}',
+      '.dspf-notice{position:absolute;right:0;bottom:calc(100% + 8px);z-index:2;',
+      'display:flex;align-items:stretch;gap:9px;width:196px;',
+      'padding:8px 10px 8px 8px;border:1px solid var(--dsw-alias-border-l1);',
+      'border-radius:10px;background:var(--dsw-alias-bg-overlay);',
+      'box-shadow:var(--dsw-elevation-panel);',
+      'animation:dspf-notice-life 5.2s cubic-bezier(.22,.61,.36,1) both}',
+      '.dspf-notice-bar{width:3px;flex:none;border-radius:2px;background:var(--dsp-accent)}',
+      '.dspf-notice-text{display:flex;flex-direction:column;gap:1px;min-width:0}',
+      '.dspf-notice-title{font-size:12px;line-height:17px;font-weight:500;',
+      'color:var(--dsw-alias-label-primary)}',
+      '.dspf-notice-sub{font-size:11px;line-height:16px;',
+      'color:var(--dsw-alias-label-secondary)}',
+      '@keyframes dspf-notice-life{0%{opacity:0;transform:translateY(7px) scale(.985)}',
+      '7%{opacity:1;transform:none}86%{opacity:1;transform:none}',
+      '100%{opacity:0;transform:translateY(-2px)}}',
+      '@media (prefers-reduced-motion:reduce){',
+      '.dspf-ripple,.dspf-aura,.dspf-topline{display:none}',
+      '.dspf-notice{animation:none}}',
     ].join('')
 
     function Ring(props) {
@@ -834,6 +1023,21 @@ window.__ModuleLoader__.load({
           label: props.t('sound'), checked: settingsNow.sound,
           onChange: (value) => props.onSettings({ sound: value }),
         }),
+        h(ChoiceRow, {
+          label: props.t('motionLabel'),
+          value: settingsNow.motion,
+          options: [
+            { id: 'off', label: props.t('motionOff') },
+            { id: 'ripple', label: props.t('motionRipple') },
+            { id: 'aura', label: props.t('motionAura') },
+            { id: 'combo', label: props.t('motionCombo') },
+          ],
+          onChange: (value) => props.onSettings({ motion: value }),
+        }),
+        h(SwitchRow, {
+          label: props.t('noticeToggle'), checked: settingsNow.notice,
+          onChange: (value) => props.onSettings({ notice: value }),
+        }),
         h('div', { className: 'dsp-rule', 'aria-hidden': true }),
         h(SwitchRow, {
           label: props.t('floatToggle'), checked: settingsNow.float,
@@ -845,11 +1049,79 @@ window.__ModuleLoader__.load({
         }),
         h('div', { className: 'dsp-actions' },
           h('button', {
+            type: 'button', className: 'dsp-action', onClick: props.onPreviewAlert,
+            disabled: settingsNow.motion === 'off' && settingsNow.notice !== true,
+          }, props.t('previewMotion')),
+          h('button', {
             type: 'button', className: 'dsp-action', onClick: props.onResetPhase,
           }, props.t('resetPhase')),
           h('button', {
             type: 'button', className: 'dsp-action', onClick: props.onRestoreDefaults,
           }, props.t('restoreDefaults')),
+        ),
+      )
+    }
+
+    /** Which copy a finished phase contributes to the notice title. */
+    const FINISHED_TITLE_KEY = {
+      focus: 'focusFinished',
+      short: 'shortFinished',
+      long: 'longFinished',
+    }
+
+    /** Small segmented control for an enumerated preference. */
+    function ChoiceRow(props) {
+      return h('div', { className: 'dsp-stack' },
+        h('span', { className: 'dsp-row-label' }, props.label),
+        h('span', { className: 'dsp-choice', role: 'group', 'aria-label': props.label },
+          props.options.map((option) => h('button', {
+            key: option.id,
+            type: 'button',
+            className: 'dsp-choice-btn',
+            'aria-pressed': option.id === props.value,
+            onClick: () => props.onChange(option.id),
+          }, option.label)),
+        ),
+      )
+    }
+
+    /** Three rings that restart from the alert token each time. */
+    function RippleField(props) {
+      const rings = []
+      for (let index = 0; index < 3; index += 1) {
+        rings.push(h('span', {
+          key: `ripple-${props.token}-${index}`,
+          className: 'dspf-ripple',
+          style: { animationDelay: `${index * 150}ms` },
+        }))
+      }
+      return h('span', { className: 'dspf-ripples', 'aria-hidden': true }, rings)
+    }
+
+    /** Frame-wide part of the alert: edge aura and the top hairline. */
+    function AlertAura(props) {
+      if (props.show !== true) return null
+      return h(React.Fragment, null,
+        h('div', { key: `aura-${props.token}`, className: 'dspf-aura', 'aria-hidden': true }),
+        h('div', { key: `topline-${props.token}`, className: 'dspf-topline', 'aria-hidden': true }),
+      )
+    }
+
+    /** Text card that says what ended and what comes next. */
+    function NoticeCard(props) {
+      const titleKey = FINISHED_TITLE_KEY[props.from] ?? 'focusFinished'
+      const nextName = props.t(props.to)
+      return h('div', {
+        className: 'dspf-notice',
+        role: 'status',
+        'aria-live': 'polite',
+        'data-alert': props.token,
+      },
+        h('span', { className: 'dspf-notice-bar', 'aria-hidden': true }),
+        h('span', { className: 'dspf-notice-text' },
+          h('span', { className: 'dspf-notice-title' }, props.t(titleKey)),
+          h('span', { className: 'dspf-notice-sub' },
+            `${nextName} ${formatTime(props.nextMs)}`),
         ),
       )
     }
@@ -875,6 +1147,13 @@ window.__ModuleLoader__.load({
       const state = props.usePomodoro((value) => value)
       const [panelOpen, setPanelOpen] = React.useState(false)
       const rootRef = React.useRef(null)
+      const clockRef = React.useRef(null)
+      const timeRef = React.useRef(null)
+      const alert = usePhaseAlert(state.alert, {
+        enabled: state.settings.float !== true
+          && (state.settings.motion !== 'off' || state.settings.notice === true),
+        withNotice: state.settings.notice === true,
+      })
 
       React.useEffect(() => {
         if (panelOpen !== true) return undefined
@@ -893,8 +1172,27 @@ window.__ModuleLoader__.load({
         }
       }, [panelOpen])
 
+      React.useEffect(() => {
+        if (alert === null) return
+        if (state.settings.motion === 'off') return
+        animateSurface(clockRef.current, [
+          { transform: 'scale(1)' },
+          { transform: 'scale(1.05)', offset: 0.26 },
+          { transform: 'scale(.995)', offset: 0.58 },
+          { transform: 'scale(1)' },
+        ], { duration: 640, easing: 'cubic-bezier(.22,.61,.36,1)' })
+        animateSurface(timeRef.current, [
+          { opacity: 0, transform: 'translateY(7px)' },
+          { opacity: 1, transform: 'translateY(0)' },
+        ], { duration: 340, easing: 'cubic-bezier(.22,.61,.36,1)' })
+      }, [alert])
+
       if (state.settings.dock !== true) return null
 
+      const motion = state.settings.motion
+      const showAura = alert !== null && (motion === 'aura' || motion === 'combo')
+      const showRipple = alert !== null && (motion === 'ripple' || motion === 'combo')
+      const showNotice = alert !== null && state.settings.notice === true
       const time = formatTime(state.remainingMs)
       const actionLabel = t(state.running === true ? 'pause' : 'start')
 
@@ -905,16 +1203,26 @@ window.__ModuleLoader__.load({
         'data-running': state.running === true,
       },
         h('style', { key: 'dsp-style' }, CSS),
+        h(AlertAura, { show: showAura, token: alert === null ? 0 : alert.token }),
+        showNotice ? h(NoticeCard, {
+          t,
+          token: alert.token,
+          from: alert.from,
+          to: alert.to,
+          nextMs: state.settings[alert.to] * 60000,
+        }) : null,
         h('div', { className: 'dsp-bar' },
           h('button', {
             type: 'button',
             className: 'dsp-clock',
+            ref: clockRef,
             title: t(state.running === true ? 'pauseHint' : 'startHint'),
             'aria-label': `${actionLabel} · ${time}`,
             onClick: toggleTimer,
           },
+            showRipple ? h(RippleField, { token: alert.token }) : null,
             h(Ring, { progress: state.progress }),
-            h('span', { className: 'dsp-time' }, time),
+            h('span', { className: 'dsp-time', ref: timeRef }, time),
           ),
           h('span', { className: 'dsp-phase', title: t(state.phase) }, t(state.phase)),
           h(CycleDots, {
@@ -940,6 +1248,7 @@ window.__ModuleLoader__.load({
           t,
           settings: state.settings,
           onSettings: updateSettings,
+          onPreviewAlert: previewAlert,
           onResetPhase: resetPhase,
           onRestoreDefaults: restoreDefaults,
         }) : null,
@@ -966,8 +1275,15 @@ window.__ModuleLoader__.load({
       const clickTimerRef = React.useRef(null)
       const guardTimerRef = React.useRef(null)
       const suppressClickRef = React.useRef(false)
+      const surfaceRef = React.useRef(null)
+      const timeRef = React.useRef(null)
       const [guarded, setGuarded] = React.useState(false)
       const collapsed = layout.collapsed === true
+      const alert = usePhaseAlert(state.alert, {
+        enabled: state.settings.float === true
+          && (state.settings.motion !== 'off' || state.settings.notice === true),
+        withNotice: state.settings.notice === true,
+      })
 
       const applyLayout = (next, persist) => {
         layoutRef.current = next
@@ -1025,8 +1341,27 @@ window.__ModuleLoader__.load({
         if (guardTimerRef.current !== null) clearTimeout(guardTimerRef.current)
       }, [])
 
+      React.useEffect(() => {
+        if (alert === null) return
+        if (state.settings.motion === 'off') return
+        animateSurface(surfaceRef.current, [
+          { transform: 'scale(1)' },
+          { transform: 'scale(1.045)', offset: 0.26 },
+          { transform: 'scale(.995)', offset: 0.58 },
+          { transform: 'scale(1)' },
+        ], { duration: 640, easing: 'cubic-bezier(.22,.61,.36,1)' })
+        animateSurface(timeRef.current, [
+          { opacity: 0, transform: 'translateY(7px)' },
+          { opacity: 1, transform: 'translateY(0)' },
+        ], { duration: 340, easing: 'cubic-bezier(.22,.61,.36,1)' })
+      }, [alert])
+
       if (state.settings.float !== true) return null
 
+      const motion = state.settings.motion
+      const showAura = alert !== null && (motion === 'aura' || motion === 'combo')
+      const showRipple = alert !== null && (motion === 'ripple' || motion === 'combo')
+      const showNotice = alert !== null && state.settings.notice === true
       const time = formatTime(state.remainingMs)
       const phaseLabel = t(state.phase)
       const actionLabel = t(state.running === true ? 'pause' : 'start')
@@ -1152,10 +1487,19 @@ window.__ModuleLoader__.load({
         'data-dragging': dragging === true,
       },
         h('style', { key: 'dsp-style' }, CSS),
+        h(AlertAura, { show: showAura, token: alert === null ? 0 : alert.token }),
+        showNotice ? h(NoticeCard, {
+          t,
+          token: alert.token,
+          from: alert.from,
+          to: alert.to,
+          nextMs: state.settings[alert.to] * 60000,
+        }) : null,
         collapsed === true
           ? h('button', {
             type: 'button',
             className: 'dspf-chip',
+            ref: surfaceRef,
             title: t('chipHint'),
             'aria-label': `${t('pluginName')} · ${phaseLabel} ${time} · ${t('chipHint')}`,
             onClick: handleChipClick,
@@ -1166,11 +1510,13 @@ window.__ModuleLoader__.load({
             onPointerUp: endDrag,
             onPointerCancel: endDrag,
           },
+            showRipple ? h(RippleField, { token: alert.token }) : null,
             h(Ring, { progress: state.progress, size: 17 }),
-            h('span', { className: 'dspf-chip-time' }, time),
+            h('span', { className: 'dspf-chip-time', ref: timeRef }, time),
           )
           : h('div', {
             className: 'dspf-card',
+            ref: surfaceRef,
             role: 'group',
             'aria-label': t('pluginName'),
             'data-guarded': guarded === true,
@@ -1208,8 +1554,9 @@ window.__ModuleLoader__.load({
               onDoubleClick: handleDoubleClick,
             },
               h('div', { className: 'dspf-clock' },
+                showRipple ? h(RippleField, { token: alert.token }) : null,
                 h(Ring, { progress: state.progress, size: 64 }),
-                h('span', { className: 'dspf-time' }, time),
+                h('span', { className: 'dspf-time', ref: timeRef }, time),
               ),
               h('div', { className: 'dspf-meta' },
                 h('span', { className: 'dspf-phase' }, phaseLabel),
@@ -1246,6 +1593,7 @@ window.__ModuleLoader__.load({
                 t,
                 settings: state.settings,
                 onSettings: updateSettings,
+                onPreviewAlert: previewAlert,
                 onResetPhase: resetPhase,
                 onRestoreDefaults: restoreDefaults,
               }),
