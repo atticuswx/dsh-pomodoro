@@ -16,7 +16,7 @@
  * `--dsw-alias-*` theme token.
  */
 window.__ModuleLoader__.load({
-  id: '@local/dsh-pomodoro',
+  id: 'dsh-pomodoro',
   factory(require) {
     const React = require('react')
     const h = React.createElement

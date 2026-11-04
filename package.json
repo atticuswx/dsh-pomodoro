@@ -1,6 +1,6 @@
 {
-  "name": "@local/dsh-pomodoro",
-  "version": "0.3.0",
+  "name": "dsh-pomodoro",
+  "version": "0.3.1",
   "type": "module",
   "description": "A Pomodoro timer for the DSH Web GUI: a draggable floating window that stays visible without an open session, plus an optional dock pill, sharing one focus/break countdown with cycle dots, chime, notifications, and local preferences.",
   "license": "MIT",

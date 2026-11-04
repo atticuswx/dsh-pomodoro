@@ -5,4 +5,4 @@
 # the row exists so the bundle is selectable and visible in the plugin list.
 - insert:
     - id: pomodoro
-      name: '@local/dsh-pomodoro'
+      name: 'dsh-pomodoro'

@@ -82,7 +82,7 @@ dsh plugin --profile web add github:atticuswx/dsh-pomodoro
 装完刷新页面，右下角就会出现那颗胶囊。想锁定版本，可以在地址后面加 tag：
 
 ```bash
-dsh plugin --profile web add github:atticuswx/dsh-pomodoro#v0.3.0
+dsh plugin --profile web add github:atticuswx/dsh-pomodoro#v0.3.1
 ```
 
 也可以从本地目录安装（改代码即时生效，适合自己改着玩）：
@@ -103,7 +103,7 @@ plugin_manager { action: "install_bundle", target: "/Users/<你>/dsh-plugins/dsh
 （常驻悬浮窗）和 `conversation.composer.dock`（可选计时条）。改动 `client.js` 后若界面
 没更新，刷新一次页面即可。
 
-> 包名沿用本地开发时的 `@local/dsh-pomodoro`，安装时用上面的仓库地址即可，不需要关心名字。
+> 包名 `dsh-pomodoro`，与仓库同名。插件在 profile 里显示为 `pomodoro` 这一行。
 
 ## 实现要点
 
